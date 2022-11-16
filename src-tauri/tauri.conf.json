@@ -16,6 +16,9 @@
         "writeFile": true,
         "scope": ["$APP/*", "$APP", "$DATA/*", "$DATA"]
       },
+      "notification": {
+        "all": true
+      },
       "all": true
     },
     "bundle": {

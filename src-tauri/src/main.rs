@@ -23,9 +23,13 @@ async fn fetch_event(id: String) -> Vec<String> {
     let res = reqwest::get(url).await.unwrap().text().await.unwrap();
     let doc = Html::parse_document(&res);
     let s = Selector::parse("ul.c-timeline--activity-list").unwrap();
+    let li_selector = Selector::parse("li").unwrap();
     let mut result = Vec::new();
-    doc.select(&s).for_each(|e| {
-        result.push(format!("{:?}", e.text().collect::<Vec<_>>()));
-    });
+    for element in doc.select(&s) {
+        for li in element.select(&li_selector) {
+            let text = li.text().collect::<Vec<_>>();
+            result.push(text.join(""));
+        }
+    }
     result
 }
