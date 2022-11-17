@@ -6,6 +6,7 @@ import {
         Box,
         Button,
         Container,
+        Divider,
         Heading,
         Input,
         List,
@@ -15,25 +16,40 @@ import {
 } from "@chakra-ui/react";
 import { MdOutlineInfo } from "react-icons/md";
 import { bootUp } from "./start";
-import { appWindow } from "@tauri-apps/api/window";
+import { listen, emit } from "@tauri-apps/api/event";
 
 function App() {
-        const [event, setEvent] = useState([]);
         const [id, setID] = useState("");
-        const [logs, setLogs] = useState<string[]>([]);
+        const [newLogs, setNewLogs] = useState<string[]>([]);
+        const [history, setHistory] = useState<string[]>([]);
         useEffect(() => {
                 const asyncBoot = async () => {
                         const config = await bootUp();
                         if (config) {
                                 setID(config.id.toString());
-                                setLogs(config.logs);
+                                setHistory(config.logs);
                         }
                 };
                 asyncBoot();
+                let unlisten: any;
+                async function fetchNewLog() {
+                        unlisten = await listen("fetch_new_log", (event) => {
+                                const { logs } = event.payload as { logs: string[] };
+                                sendNotification({ title: "転職ドラフト", body: logs[0] });
+                                setHistory((prev) => [...logs, ...prev]);
+                                setNewLogs(logs);
+                        });
+                }
+                fetchNewLog();
+                return () => {
+                        if (unlisten) {
+                                unlisten();
+                        }
+                };
         }, []);
         async function fetchEvents() {
-                appWindow.minimize();
-                setEvent(await invoke("fetch_event", { id }));
+                emit("input_user_id", id);
+                //setEvent(await invoke("manual_fetch_new_log", { id }));
                 sendNotification({ title: "転職ドラフト", body: "new notification" });
         }
 
@@ -69,11 +85,21 @@ function App() {
 
                         <Stack direction="row" py={10} justifyContent="center" mx="10%">
                                 <List spacing={3} alignSelf="center" justifySelf="center">
-                                        {event.map((e) => {
+                                        {newLogs.map((l) => {
                                                 return (
-                                                        <ListItem key={e}>
+                                                        <ListItem key={l}>
                                                                 <ListIcon as={MdOutlineInfo} color="green.500" />
-                                                                {e}
+                                                                {l}
+                                                        </ListItem>
+                                                );
+                                        })}
+                                        <Divider />
+                                        <Heading>History</Heading>
+                                        {history.map((h) => {
+                                                return (
+                                                        <ListItem key={h}>
+                                                                <ListIcon as={MdOutlineInfo} color="green.500" />
+                                                                {h}
                                                         </ListItem>
                                                 );
                                         })}
