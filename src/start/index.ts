@@ -5,7 +5,7 @@ import {
         sendNotification,
 } from "@tauri-apps/api/notification";
 import { APP_NAME, Config } from "../const";
-import { createDataFolder, readFromFile, writeToFile } from "../fs";
+import { createDataFolder, readFromFile } from "../fs";
 
 export const bootUp = async () => {
         let permissionGranted = await isPermissionGranted();
@@ -16,14 +16,18 @@ export const bootUp = async () => {
         const isInitial = await isInitialBoot();
         if (isInitial) {
                 await createDataFolder();
-                await writeToFile("tensyoku-scraping/tensyoku-scraping.json", "");
                 return;
         }
 
         try {
-                return JSON.parse(
-                        await readFromFile("tensyoku-scraping/tensyoku-scraping.json")
-                ) as Config;
+                const id = JSON.parse(
+                        await readFromFile("tensyoku-scraping/user_id")
+                ) as number;
+                const logs = (await readFromFile("tensyoku-scraping/logs"))
+                        .split("\n")
+                        .filter((l: string) => l !== "");
+                logs.reverse();
+                return { id, logs } as Config;
         } catch (e) {
                 sendNotification({
                         title: "Unexpected Error",
@@ -33,7 +37,7 @@ export const bootUp = async () => {
 };
 
 const isInitialBoot = async () => {
-        const path = `${APP_NAME}/tensyoku-scraping.json`;
+        const path = `${APP_NAME}/user_id`;
         try {
                 await readTextFile(path, {
                         dir: BaseDirectory.AppData,
