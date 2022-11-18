@@ -16,7 +16,7 @@ import {
 } from "@chakra-ui/react";
 import { MdOutlineInfo } from "react-icons/md";
 import { bootUp } from "./start";
-import { listen, emit } from "@tauri-apps/api/event";
+import { listen, emit, UnlistenFn } from "@tauri-apps/api/event";
 
 function App() {
         const [id, setID] = useState("");
@@ -31,7 +31,7 @@ function App() {
                         }
                 };
                 asyncBoot();
-                let unlisten: any;
+                let unlisten: UnlistenFn;
                 async function fetchNewLog() {
                         unlisten = await listen("fetch_new_log", (event) => {
                                 const { logs } = event.payload as { logs: string[] };
