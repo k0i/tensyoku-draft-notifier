@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { sendNotification } from "@tauri-apps/api/notification";
-import { invoke } from "@tauri-apps/api/tauri";
 import "./App.css";
 import {
         Box,
