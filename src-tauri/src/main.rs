@@ -6,7 +6,7 @@
 mod commands;
 use std::{
     fs::{self, File, OpenOptions},
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, Write},
     path::Path,
     process,
 };
@@ -14,6 +14,7 @@ use std::{
 use anyhow::Result;
 use flexi_logger::{FileSpec, Logger, WriteMode};
 use log::{error, info};
+use rev_buf_reader::RevBufReader;
 use scraper::{Html, Selector};
 use tauri::{api::process::restart, Manager};
 use tokio::sync::{mpsc, oneshot};
@@ -44,7 +45,7 @@ fn main() -> Result<()> {
             let mut log_dir = app.path_resolver().app_data_dir().unwrap();
             log_dir.push("tensyoku-scraping");
             let _logger = Logger::try_with_env_or_str("info")?
-                .log_to_file(FileSpec::default().directory(log_dir))
+                .log_to_file(FileSpec::default().directory(log_dir).suppress_timestamp())
                 .write_mode(WriteMode::BufferAndFlush)
                 .start()?;
             // defining required path
@@ -124,31 +125,39 @@ Err(e) => {
     Ok(())
 }
 
-fn delta_update<P: AsRef<Path>>(new: Vec<String>, history_path: P) -> Result<Vec<String>> {
+fn delta_update<P: AsRef<Path>>(mut new: Vec<String>, history_path: P) -> Result<Vec<String>> {
     let mut j = 0;
+    new.reverse();
     {
-        let mut history_file = File::open(&history_path)?;
-        let history_reader = BufReader::new(&mut history_file);
-        for i in history_reader.lines() {
+        let history_file = File::open(&history_path)?;
+        let rev_reader = RevBufReader::new(&history_file);
+        let mut his = vec![];
+        for i in rev_reader.lines() {
             if i.is_err() {
                 error!("Failed to read history file: {}", i.unwrap_err());
                 return Ok(new);
             }
             let line = i.unwrap();
-            while j < new.len() {
-                if new[j] != line {
-                    break;
-                }
-                j += 1;
+            his.push(line);
+            if his.len() == 2 {
+                break;
             }
+        }
+
+        while j + 1 < new.len() && his.len() == 2 {
+            if his[0] == new[j] && his[1] == new[j + 1] {
+                new.truncate(j);
+                break;
+            }
+            j += 1;
         }
     }
     let mut history_writer = OpenOptions::new().append(true).open(&history_path)?;
-    for k in j..new.len() {
+    for k in (0..new.len()).rev() {
         writeln!(history_writer, "{}", new[k])?;
     }
     history_writer.flush()?;
-    Ok(new[j..].to_vec())
+    Ok(new)
 }
 
 async fn fetch_event(id: String, tx: mpsc::Sender<Vec<String>>) -> Result<()> {
