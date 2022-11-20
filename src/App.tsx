@@ -11,22 +11,31 @@ import {
         List,
         ListIcon,
         ListItem,
+        Spinner,
         Stack,
+        Text,
 } from "@chakra-ui/react";
 import { MdOutlineInfo } from "react-icons/md";
 import { bootUp } from "./start";
 import { listen, emit, UnlistenFn } from "@tauri-apps/api/event";
 
 function App() {
+        // TODO: reRendering performance issue
         const [id, setID] = useState("");
-        const [newLogs, setNewLogs] = useState<string[]>([]);
-        const [history, setHistory] = useState<string[]>([]);
+        const [logState, setLogState] = useState({
+                time: new Date().toLocaleTimeString(),
+                newLogs: [] as string[],
+                history: [] as string[],
+        });
         useEffect(() => {
                 const asyncBoot = async () => {
                         const config = await bootUp();
                         if (config) {
                                 setID(config.id.toString());
-                                setHistory(config.logs);
+                                setLogState((prev) => ({
+                                        ...prev,
+                                        history: config.logs,
+                                }));
                         }
                 };
                 asyncBoot();
@@ -34,9 +43,12 @@ function App() {
                 async function fetchNewLog() {
                         unlisten = await listen("fetch_new_log", (event) => {
                                 const { logs } = event.payload as { logs: string[] };
+                                setLogState((prev) => ({
+                                        time: new Date().toLocaleTimeString(),
+                                        newLogs: logs,
+                                        history: [...logs, ...prev.history],
+                                }));
                                 sendNotification({ title: "転職ドラフト", body: logs[0] });
-                                setHistory((prev) => [...logs, ...prev]);
-                                setNewLogs(logs);
                         });
                 }
                 fetchNewLog();
@@ -48,7 +60,6 @@ function App() {
         }, []);
         async function fetchEvents() {
                 emit("input_user_id", id);
-                //setEvent(await invoke("manual_fetch_new_log", { id }));
                 sendNotification({ title: "転職ドラフト", body: "new notification" });
         }
 
@@ -62,13 +73,24 @@ function App() {
                 >
                         <Box alignItems="center">
                                 <Heading as="h1" size="2xl">
-                                        転職Draft Notifier
+                                        Tenshoku Draft Notifier
                                 </Heading>
                         </Box>
                         <Box textAlign="center" py={6}>
-                                <Heading as="h2" size="md">
-                                        Please Enter Your User ID
-                                </Heading>
+                                {id === "" || logState.history.length === 0 ? (
+                                        <Heading as="h2" size="md">
+                                                Please Enter Your User ID
+                                        </Heading>
+                                ) : (
+                                        <>
+                                                <Heading as="h2" size="md">
+                                                        Your current ID : {id}
+                                                </Heading>
+                                                <Heading as="h4" size="md">
+                                                        Last updated at <Text as="em">{logState.time}</Text>
+                                                </Heading>
+                                        </>
+                                )}
                         </Box>
 
                         <Stack direction="row" py={8} justifyContent="center">
@@ -78,32 +100,40 @@ function App() {
                                         w="30%"
                                 />
                                 <Button onClick={() => fetchEvents()} color="teal.400">
-                                        Subscribe
+                                        {id === "" ? "Subscribe" : "Resubscribe"}
                                 </Button>
                         </Stack>
 
-                        <Stack direction="row" py={10} justifyContent="center" mx="10%">
-                                <List spacing={3} alignSelf="center" justifySelf="center">
-                                        {newLogs.map((l) => {
-                                                return (
-                                                        <ListItem key={l}>
-                                                                <ListIcon as={MdOutlineInfo} color="green.500" />
-                                                                {l}
-                                                        </ListItem>
-                                                );
-                                        })}
-                                        <Divider />
-                                        <Heading>History</Heading>
-                                        {history.map((h) => {
-                                                return (
-                                                        <ListItem key={h}>
-                                                                <ListIcon as={MdOutlineInfo} color="green.500" />
-                                                                {h}
-                                                        </ListItem>
-                                                );
-                                        })}
-                                </List>
-                        </Stack>
+                        {id !== "" && logState.history.length !== 0 && (
+                                <Stack direction="row" py={10} justifyContent="center" mx="10%">
+                                        <Spinner color="red.500" />
+                                        <List spacing={3} alignSelf="center" justifySelf="center">
+                                                <Heading as="h3" size="lg">
+                                                        Recent Logs
+                                                </Heading>
+                                                {logState.newLogs.map((l) => {
+                                                        return (
+                                                                <ListItem key={l}>
+                                                                        <ListIcon as={MdOutlineInfo} color="green.500" />
+                                                                        {l}
+                                                                </ListItem>
+                                                        );
+                                                })}
+                                                <Divider py={2} my={8} borderColor="red.400" />
+                                                <Heading as="h3" size="lg">
+                                                        History
+                                                </Heading>
+                                                {logState.history.map((h, i) => {
+                                                        return (
+                                                                <ListItem key={h + i.toString()}>
+                                                                        <ListIcon as={MdOutlineInfo} color="green.500" />
+                                                                        {h}
+                                                                </ListItem>
+                                                        );
+                                                })}
+                                        </List>
+                                </Stack>
+                        )}
                 </Container>
         );
 }
