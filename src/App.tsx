@@ -97,7 +97,7 @@ function App() {
                                 <Input
                                         onChange={(e) => setID(e.currentTarget.value)}
                                         focusBorderColor="pink.400"
-                                        w="30%"
+                                        w="20%"
                                 />
                                 <Button onClick={() => fetchEvents()} color="teal.400">
                                         {id === "" ? "Subscribe" : "Resubscribe"}

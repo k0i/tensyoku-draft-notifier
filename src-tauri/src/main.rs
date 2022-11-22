@@ -14,12 +14,41 @@ use std::{
 use anyhow::Result;
 use flexi_logger::{FileSpec, Logger, WriteMode};
 use log::{error, info};
+use reqwest::header::{HeaderMap, USER_AGENT};
 use rev_buf_reader::RevBufReader;
 use scraper::{Html, Selector};
 use tauri::{api::process::restart, Manager};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::commands::manual_fetch_new_log;
+
+const USER_AGENTS :[&str;25] = [
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.143 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/602.1.50 (KHTML, like Gecko) Version/10.0 Safari/602.1.50",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.11; rv:49.0) Gecko/20100101 Firefox/49.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.143 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_1) AppleWebKit/602.2.14 (KHTML, like Gecko) Version/10.0.1 Safari/602.2.14",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12) AppleWebKit/602.1.50 (KHTML, like Gecko) Version/10.0 Safari/602.1.50",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.79 Safari/537.36 Edge/14.14393",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.143 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.143 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; WOW64; rv:49.0) Gecko/20100101 Firefox/49.0",
+    "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.143 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.143 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:49.0) Gecko/20100101 Firefox/49.0",
+    "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; rv:11.0) like Gecko",
+    "Mozilla/5.0 (Windows NT 6.3; rv:36.0) Gecko/20100101 Firefox/36.0",
+    "Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.143 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.143 Safari/537.36",
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:49.0) Gecko/20100101 Firefox/49.0",
+];
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 struct FetchNewLogPayload {
@@ -161,11 +190,21 @@ fn delta_update<P: AsRef<Path>>(mut new: Vec<String>, history_path: P) -> Result
 }
 
 async fn fetch_event(id: String, tx: mpsc::Sender<Vec<String>>) -> Result<()> {
+    let mut user_agent_index = 0;
     loop {
         let mut result = Vec::new();
         {
             let url = format!("https://job-draft.jp/users/{}", id);
-            let res = reqwest::get(url).await?.text().await?;
+            let mut headers = HeaderMap::new();
+            headers.insert(USER_AGENT, USER_AGENTS[user_agent_index].parse()?);
+            let client = reqwest::Client::new();
+            let res = client
+                .get(&url)
+                .headers(headers)
+                .send()
+                .await?
+                .text()
+                .await?;
             let doc = Html::parse_document(&res);
             let s = Selector::parse("ul.c-timeline--activity-list")
                 .expect("ul.c-timeline--activity-list element not found: maybe html changed");
@@ -182,6 +221,11 @@ async fn fetch_event(id: String, tx: mpsc::Sender<Vec<String>>) -> Result<()> {
         if let Err(e) = tx.send(result).await {
             error!("error sending fetched result: {:?}", e);
         }
-        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        if user_agent_index == USER_AGENTS.len() - 1 {
+            user_agent_index = 0;
+        } else {
+            user_agent_index += 1;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(20)).await;
     }
 }
