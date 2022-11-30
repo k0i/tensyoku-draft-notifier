@@ -3,10 +3,9 @@ This is a desktop application that is related to [転職ドラフト](https://jo
 Once started, it scrapes and notifies updates from the site　.
 
 # Install
-> **Warning**
+> **Warning** : According to their terms of use, the act of scraping for the site is forbidden.
 
-> According to their terms of use, the act of scraping for the site is forbidden.
-
+This application is still under development!
 Please see Release page
 https://github.com/k0i/tensyoku-draft-notifier/tags
 
